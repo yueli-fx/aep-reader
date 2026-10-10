@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TARGET_DIR: ${{ github.workspace }}/.task/ci-target
+  CARGO_TERM_COLOR: always
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  native:
+    name: Native (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install stable tools
+        run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy --no-self-update
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Format library
+        run: cargo +stable fmt --check
+      - name: Test all features
+        run: cargo +stable test --locked --all-features
+      - name: Test core without serialization
+        run: cargo +stable test --locked --no-default-features
+      - name: Lint library and examples
+        run: cargo +stable clippy --locked --all-targets --all-features -- -D warnings
+      - name: Build API documentation
+        run: cargo +stable doc --locked --all-features --no-deps
+      - name: Format independent consumer
+        run: cargo +stable fmt --manifest-path examples/consumer/Cargo.toml --check
+      - name: Lint independent consumer
+        run: cargo +stable clippy --locked --manifest-path examples/consumer/Cargo.toml --all-targets --all-features -- -D warnings
+      - name: Test independent consumer CLI
+        run: python tools/check_consumer.py --toolchain stable
+      - name: Verify source package
+        run: cargo +stable package --locked --all-features --allow-dirty
+      - name: Check package contents
+        run: python tools/check_source_package.py "${{ env.CARGO_TARGET_DIR }}/package/aep-reader-0.1.0.crate"
+
+  msrv:
+    name: Minimum Rust 1.85.0
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install minimum Rust
+        run: rustup toolchain install 1.85.0 --profile minimal --target wasm32-unknown-unknown --no-self-update
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Test library with all features
+        run: cargo +1.85.0 test --locked --all-features
+      - name: Test library without serialization
+        run: cargo +1.85.0 test --locked --no-default-features
+      - name: Test independent consumer
+        run: python tools/check_consumer.py --toolchain 1.85.0
+      - name: Check minimum-Rust Wasm build
+        run: cargo +1.85.0 check --locked --target wasm32-unknown-unknown --all-features
+
+  wasm:
+    name: WebAssembly (stable)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Wasm toolchain
+        run: rustup toolchain install stable --profile minimal --target wasm32-unknown-unknown --no-self-update
+      - name: Check core Wasm build
+        run: cargo +stable check --locked --target wasm32-unknown-unknown --no-default-features
+      - name: Check serialized Wasm build
+        run: cargo +stable check --locked --target wasm32-unknown-unknown --all-features

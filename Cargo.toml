@@ -1,0 +1,39 @@
+[package]
+name = "aep-reader"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+description = "Bounded, read-only After Effects AEP parser in pure Rust"
+repository = "https://github.com/yueli-fx/aep-reader"
+keywords = ["after-effects", "aep", "parser", "motion-graphics"]
+categories = ["parser-implementations", "multimedia"]
+publish = false
+include = ["/src/**", "/tests/**", "/examples/*.rs", "/Cargo.toml", "/Cargo.lock", "/README.md", "/READING-COVERAGE.md", "/VALIDATION.md", "/PROVENANCE.md", "/COMPARISON.md", "/LICENSE-MIT", "/LICENSE-APACHE"]
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+
+[dev-dependencies]
+serde_json = "1"
+
+[[example]]
+name = "inspect"
+required-features = ["serde"]
+
+[[example]]
+name = "inspect_derived"
+required-features = ["serde"]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"

@@ -1,0 +1,27 @@
+[package]
+name = "aep-reader-consumer"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# An independent workspace: this example consumes the public path dependency.
+[workspace]
+
+[features]
+default = []
+json = ["aep-reader/serde", "dep:serde_json"]
+
+[dependencies]
+aep-reader = { path = "../..", default-features = false }
+serde_json = { version = "1", optional = true }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"

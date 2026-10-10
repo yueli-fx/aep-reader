@@ -1,0 +1,34 @@
+[package]
+name = "aep-effectcraft"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace]
+
+[features]
+render-check = ["dep:effectcraft-render"]
+
+[dependencies]
+aep-reader = { path = "../.." }
+effectcraft-project = { path = "../../../effectcraft/crates/project" }
+effectcraft-keyframe = { path = "../../../effectcraft/crates/keyframe" }
+effectcraft-time = { path = "../../../effectcraft/crates/time" }
+effectcraft-color = { path = "../../../effectcraft/crates/color" }
+effectcraft-render = { path = "../../../effectcraft/crates/render", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+
+[target.'cfg(windows)'.dependencies]
+rfd = { version = "=0.16.0", default-features = false }

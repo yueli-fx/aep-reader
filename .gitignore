@@ -1,0 +1,7 @@
+/target/
+/dist/
+/examples/consumer/target/
+/.task/
+/flightdeck/
+__pycache__/
+/examples/effectcraft/target/

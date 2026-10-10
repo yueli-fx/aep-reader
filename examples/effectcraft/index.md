@@ -1,0 +1,10 @@
+# EffectCraft consumer
+
+- [Usage and scope](README.md)
+- [Adapter](src/lib.rs)
+- [Command line](src/main.rs)
+- [Public-boundary tests](tests/import.rs)
+- [Shape and mask mapping](src/shapes.rs)
+- [Text mapping](src/text.rs)
+- [Gaussian effect mapping](src/effects.rs)
+- [Native content and render checks](tests/content.rs)
