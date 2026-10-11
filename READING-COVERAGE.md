@@ -3,6 +3,8 @@
 This describes the data exposed by `aep-reader`, its public accessors and decoding
 limits. Supported fields can be used independently of any consuming application.
 [VALIDATION.md](VALIDATION.md) records the tested behavior.
+[CAPABILITIES.md](CAPABILITIES.md) separates reader maturity from application
+integration; an exposed property stream is not an implemented renderer operation.
 
 ## Decoded data
 

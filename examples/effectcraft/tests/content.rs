@@ -4,6 +4,7 @@
     clippy::panic,
     clippy::indexing_slicing
 )]
+mod support;
 use effectcraft_keyframe::Value;
 use effectcraft_project::LayerSource;
 use effectcraft_time::Tick;
@@ -622,7 +623,7 @@ fn static_tracking_animator_preserves_saved_range_and_amount() {
             .report
             .warnings
             .iter()
-            .any(|w| w.message.contains("unverified tracking type"))
+            .any(|w| w.message.contains("unverified animator mode"))
     );
 }
 
@@ -671,4 +672,125 @@ fn corpus_duration_and_bad_ease_do_not_destroy_import() {
             .comps()
             .any(|(_, c)| c.display_start < effectcraft_time::Tick::ZERO)
     );
+}
+
+#[test]
+#[ignore = "authored character offset via AEP_DATA_ROOT"]
+fn character_offset_preserves_range_and_saved_amount() {
+    let path = std::path::PathBuf::from(std::env::var_os("AEP_DATA_ROOT").unwrap())
+        .join("reference/text-animator/re_text_animator_charoffset.aep");
+    let result = aep_effectcraft::import(&std::fs::read(path).unwrap()).unwrap();
+    let layer = &result.project.comps().next().unwrap().1.layers[0];
+    let anim = layer.props.group("text/animators/animator").unwrap();
+    for (path, value) in [
+        ("selectors/rangeSelector/start", 20.0),
+        ("selectors/rangeSelector/end", 80.0),
+        ("selectors/rangeSelector/offset", 10.0),
+        ("properties/characterOffset", 5.0),
+    ] {
+        assert_eq!(anim.prop(path).unwrap().value, Value::Scalar(value));
+    }
+    assert!(
+        result
+            .report
+            .warnings
+            .iter()
+            .any(|w| w.message.contains("alignment equivalence"))
+    );
+}
+
+#[test]
+#[ignore = "native mask metadata modified only in memory"]
+fn all_mask_modes_map_without_silent_add_fallback() {
+    let input = bytes("re_mask_open.aep");
+    let doc = aep_reader::parse(&input).unwrap();
+    let offsets: Vec<_> = doc
+        .root
+        .walk()
+        .filter(|c| c.id == *b"mkif")
+        .map(|c| c.offset + 8 + 4)
+        .collect();
+    assert!(!offsets.is_empty());
+    for code in 0u32..=7 {
+        let mut changed = input.clone();
+        for at in &offsets {
+            changed[*at..*at + 4].copy_from_slice(&code.to_be_bytes());
+        }
+        let result = aep_effectcraft::import(&changed).unwrap();
+        let masks: Vec<_> = result
+            .project
+            .comps()
+            .flat_map(|(_, c)| &c.layers)
+            .filter_map(|l| l.props.group("masks"))
+            .flat_map(|g| &g.children)
+            .filter_map(|n| match n {
+                effectcraft_project::Node::Group(g) => match g.kind {
+                    effectcraft_project::GroupKind::Mask { mode, .. } => Some(mode),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .collect();
+        if code == 7 {
+            assert!(masks.is_empty());
+        } else {
+            assert_eq!(
+                masks,
+                vec![
+                    [
+                        effectcraft_project::MaskMode::None,
+                        effectcraft_project::MaskMode::Add,
+                        effectcraft_project::MaskMode::Subtract,
+                        effectcraft_project::MaskMode::Intersect,
+                        effectcraft_project::MaskMode::Lighten,
+                        effectcraft_project::MaskMode::Darken,
+                        effectcraft_project::MaskMode::Difference
+                    ][code as usize];
+                    offsets.len()
+                ]
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "native tracking container with synthetic keys in memory"]
+fn animated_tracking_keeps_amount_and_selector_key_times() {
+    let path = std::path::PathBuf::from(std::env::var_os("AEP_DATA_ROOT").unwrap())
+        .join("reference/text-animator/re_text_animator_tracking.aep");
+    let mut input = std::fs::read(path).unwrap();
+    let ticks =
+        aep_reader::parse(&input).unwrap().project.compositions[0].keyframe_ticks_per_second;
+    for (name, keys) in [
+        ("ADBE Text Tracking Amount", [(0, 10.0), (ticks, 90.0)]),
+        (
+            "ADBE Text Percent Start",
+            [(ticks / 2, 20.0), (ticks * 3 / 2, 60.0)],
+        ),
+    ] {
+        let doc = aep_reader::parse(&input).unwrap();
+        let at = doc.project.compositions[0].layers[0]
+            .node(name)
+            .unwrap()
+            .source
+            .offset;
+        let replacement = support::keyed_field(name, &keys);
+        let prefix = support::chunk(b"tdmn", name.as_bytes()).len();
+        input = support::replace_chunk(&doc.root, at, &replacement[prefix..]);
+    }
+    let result = aep_effectcraft::import(&input).unwrap();
+    let layer = &result.project.comps().next().unwrap().1.layers[0];
+    let anim = layer
+        .props
+        .group("text/animators/animator")
+        .unwrap_or_else(|| panic!("{:?}", result.report.warnings));
+    let amount = anim.prop("properties/tracking").unwrap();
+    let start = anim.prop("selectors/rangeSelector/start").unwrap();
+    assert_eq!(amount.keys.len(), 2);
+    assert_eq!(
+        effectcraft_keyframe::evaluate(&amount.keys, Tick::from_seconds_f64(0.5), false),
+        Some(Value::Scalar(50.0))
+    );
+    assert_eq!(start.keys[0].time, Tick::from_seconds_f64(0.5));
+    assert_eq!(start.keys[1].time, Tick::from_seconds_f64(1.5));
 }

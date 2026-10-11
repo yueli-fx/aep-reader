@@ -19,7 +19,12 @@ fn convert(input: &Path, output: &Path) -> Result<String, Box<dyn std::error::Er
     if bytes.len() as u64 > limit {
         return Err("AEP exceeds 256 MiB input limit".into());
     }
-    let imported = aep_effectcraft::import(&bytes)?;
+    let imported = aep_effectcraft::import_with_options(
+        &bytes,
+        aep_effectcraft::ImportOptions {
+            recover_missing_parents: true,
+        },
+    )?;
     let json = imported.project.to_file_json()?;
     let report = serde_json::json!({
         "source": input.to_string_lossy(),

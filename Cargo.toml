@@ -9,7 +9,7 @@ repository = "https://github.com/yueli-fx/aep-reader"
 keywords = ["after-effects", "aep", "parser", "motion-graphics"]
 categories = ["parser-implementations", "multimedia"]
 publish = false
-include = ["/src/**", "/tests/**", "/examples/*.rs", "/Cargo.toml", "/Cargo.lock", "/README.md", "/READING-COVERAGE.md", "/VALIDATION.md", "/PROVENANCE.md", "/COMPARISON.md", "/LICENSE-MIT", "/LICENSE-APACHE"]
+include = ["/src/**", "/tests/**", "/examples/*.rs", "/Cargo.toml", "/Cargo.lock", "/README.md", "/READING-COVERAGE.md", "/CAPABILITIES.md", "/CHANGELOG.md", "/VALIDATION.md", "/PROVENANCE.md", "/COMPARISON.md", "/LICENSE-MIT", "/LICENSE-APACHE"]
 
 [features]
 default = []

@@ -11,9 +11,16 @@ use effectcraft_project::{
 use effectcraft_time::{FrameRate, TICKS_PER_SECOND, Tick};
 use serde::Serialize;
 
+mod animation;
 mod compositing;
 mod effects;
+mod gradients;
+mod operators;
+mod repeaters;
+mod scene_metadata;
+mod shape_fields;
 mod shapes;
+mod stars;
 mod text;
 mod text_animators;
 
@@ -48,20 +55,31 @@ pub struct Import {
     pub report: Report,
 }
 
+/// Repairs are explicit. The byte API is strict unless a caller opts in.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ImportOptions {
+    pub recover_missing_parents: bool,
+}
+
 /// Parse bounded bytes into a new project. Failure never mutates an existing project.
 /// Keep the original AEP: unsupported data is not round-tripped through ecproj.
 pub fn import(bytes: &[u8]) -> Result<Import> {
+    import_with_options(bytes, ImportOptions::default())
+}
+
+pub fn import_with_options(bytes: &[u8], options: ImportOptions) -> Result<Import> {
     // Desktop projects in the corpus exceed the reusable reader's conservative
     // defaults. Keep explicit finite budgets instead of making parsing unlimited.
     let limits = ae::Limits {
         max_chunks: 1_000_000,
-        max_allocated_bytes: 512 * 1024 * 1024,
+        max_allocated_bytes: 768 * 1024 * 1024,
         ..ae::Limits::default()
     };
     let document = ae::parse_with_limits(bytes, &limits).map_err(|e| e.to_string())?;
     let input = &document.project;
     let mut project = Project::default();
     let mut report = Report::default();
+    scene_metadata::project(input, &mut project, &mut report);
     report.warn("project", "Experimental import with per-property warnings. Color management, markers, render settings and unsupported operators are not fully mapped. Keep the original AEP; unspecified properties use target defaults.");
     for d in &input.diagnostics {
         report.warn(
@@ -154,6 +172,7 @@ pub fn import(bytes: &[u8]) -> Result<Import> {
             .comp(cid)
             .ok_or("missing target composition")?
             .clone();
+        scene_metadata::composition(source_comp, &mut comp, &mut report)?;
         let mut layer_ids = BTreeMap::new();
         for source in &source_comp.layers {
             if layer_ids.contains_key(&source.id) {
@@ -163,6 +182,14 @@ pub fn import(bytes: &[u8]) -> Result<Import> {
             let layer_source = match source.kind {
                 ae::LayerKind::Null => LayerSource::Null,
                 ae::LayerKind::Shape => LayerSource::Shape,
+                ae::LayerKind::Camera => LayerSource::Camera,
+                ae::LayerKind::Light => match scene_metadata::light(source.light_kind) {
+                    Some(kind) => LayerSource::Light { kind },
+                    None => {
+                        report.warn(&context, "Unknown light type; null placeholder retained.");
+                        LayerSource::Null
+                    }
+                },
                 ae::LayerKind::Text if source.text_source.is_some() => LayerSource::Text,
                 ae::LayerKind::Av | ae::LayerKind::Adjustment => {
                     let item = source.source_id.and_then(|id| ids.get(&id)).copied();
@@ -230,7 +257,7 @@ pub fn import(bytes: &[u8]) -> Result<Import> {
                 for message in warnings {
                     report.warn(&context, message);
                 }
-                report.warn(&context, "Static source text imported; source-text animation and unverified text animators are not mapped.");
+                report.warn(&context, "Static source text imported; source-text content animation and unsupported animator variants are not mapped.");
                 if let (Some(root), Some(target)) = (
                     source.node("ADBE Text Animators"),
                     layer.props.group_mut("text/animators"),
@@ -274,6 +301,23 @@ pub fn import(bytes: &[u8]) -> Result<Import> {
                     mapped_nodes.insert(node.source.offset);
                 }
             }
+            animation::channels(
+                source,
+                &mut layer,
+                &mut build::Ids(&mut project.next_id),
+                source_comp.keyframe_ticks_per_second,
+                &mut mapped_nodes,
+                &context,
+                &mut report,
+            )?;
+            scene_metadata::layer(
+                source,
+                &mut layer,
+                source_comp.keyframe_ticks_per_second,
+                &mut mapped_nodes,
+                &context,
+                &mut report,
+            )?;
             if let Some(root) = source.shapes() {
                 let mut allocated = build::Ids(&mut project.next_id);
                 let groups = shapes::contents(
@@ -373,7 +417,13 @@ pub fn import(bytes: &[u8]) -> Result<Import> {
         }
         for (source, target) in source_comp.layers.iter().zip(&mut comp.layers) {
             if let Some(id) = source.parent_id.filter(|id| *id != 0) {
-                target.parent = Some(*layer_ids.get(&id).ok_or("missing layer parent")?);
+                if let Some(parent) = layer_ids.get(&id) {
+                    target.parent = Some(*parent);
+                } else if options.recover_missing_parents {
+                    report.warn(&format!("{}/{}", source_comp.name, source.name), format!("Missing parent layer ID {id}; imported without parenting. Saved local transforms retained; original world-space placement cannot be recovered."));
+                } else {
+                    return Err("missing layer parent".into());
+                }
             }
         }
         compositing::mattes(source_comp, &mut comp, &layer_ids, &mut report)?;
@@ -456,6 +506,7 @@ fn numeric(v: &ae::Value, target: &Value, factor: f64) -> Result<Value> {
         .collect::<Result<_>>()?;
     match (values.as_slice(), target) {
         ([x], Value::Scalar(_)) => Ok(Value::Scalar(*x)),
+        ([x], Value::Bool(_)) if matches!(*x, 0.0 | 1.0) => Ok(Value::Bool(*x == 1.0)),
         ([x, y, z], Value::Vec3(_)) => Ok(Value::Vec3([*x, *y, *z])),
         ([x, y], Value::Vec2(_)) | ([x, y, _], Value::Vec2(_)) => Ok(Value::Vec2([*x, *y])),
         // AEP numeric colors are stored ARGB in 0..255, not scripting RGBA.

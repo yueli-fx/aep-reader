@@ -116,7 +116,15 @@ impl<'a> Budget<'a> {
     }
     pub fn push<T>(&mut self, v: &mut Vec<T>, x: T) -> Result<(), Error> {
         if v.len() == v.capacity() {
-            let additional = v.capacity().max(4);
+            // Large semantic records commonly occur in singleton groups. Four
+            // eagerly reserved slots would spend most of the budget on unused
+            // capacity; retain geometric growth once the vector is populated.
+            let initial = if std::mem::size_of::<T>() >= 512 {
+                1
+            } else {
+                4
+            };
+            let additional = v.capacity().max(initial);
             self.charge(
                 additional
                     .checked_mul(std::mem::size_of::<T>())
@@ -131,6 +139,11 @@ impl<'a> Budget<'a> {
     pub fn text(&mut self, bytes: &[u8]) -> Result<String, Error> {
         let end = bytes.iter().position(|b| *b == 0).unwrap_or(bytes.len());
         let bytes = bytes.get(..end).ok_or(Error::Allocation)?;
+        // Valid UTF-8 needs one exact-sized owned copy. Only malformed text
+        // needs replacement expansion and a temporary lossy buffer.
+        if let Ok(text) = std::str::from_utf8(bytes) {
+            return self.owned(text);
+        }
         // UTF-8 replacement may expand a bad source byte to three bytes.
         let capacity = bytes.len().checked_mul(3).ok_or(Error::Allocation)?;
         self.charge(capacity.checked_mul(2).ok_or(Error::Allocation)?)?;

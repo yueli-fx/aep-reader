@@ -123,6 +123,32 @@ fn actual_effectcraft_reopens_mapped_project() {
 }
 
 #[test]
+fn missing_parent_repair_is_opt_in_and_warns_about_placement() {
+    let input = fixture(999, 1, false, 1.0);
+    assert!(import(&input).is_err());
+    let result = aep_effectcraft::import_with_options(
+        &input,
+        aep_effectcraft::ImportOptions {
+            recover_missing_parents: true,
+        },
+    )
+    .unwrap();
+    assert!(
+        result.project.comps().next().unwrap().1.layers[0]
+            .parent
+            .is_none()
+    );
+    assert!(
+        result
+            .report
+            .warnings
+            .iter()
+            .any(|w| w.message.contains("Missing parent layer ID 999")
+                && w.message.contains("world-space"))
+    );
+}
+
+#[test]
 fn keyframe_time_is_converted_without_frame_rounding() {
     let result = import(&fixture(0, 1, true, 0.425)).unwrap();
     let (_, comp) = result.project.comps().next().unwrap();

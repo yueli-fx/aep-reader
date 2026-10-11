@@ -601,3 +601,59 @@ fn negative_composition_display_start_is_signed() {
         Some(-1.0 / 24.0)
     );
 }
+
+#[test]
+fn valid_utf8_uses_bounded_storage_without_lossy_expansion() {
+    let name = "名字".repeat(2048);
+    let bytes = aep(vec![list(b"Fold", vec![item(1, 7, &name, vec![])])]);
+    let limits = Limits {
+        max_allocated_bytes: name.len() * 3 + 8192,
+        ..Limits::default()
+    };
+    let doc = parse_with_limits(&bytes, &limits).unwrap();
+    assert_eq!(doc.project.items[0].name, name);
+    let small = Limits {
+        max_allocated_bytes: name.len() / 2,
+        ..Limits::default()
+    };
+    assert!(matches!(
+        parse_with_limits(&bytes, &small),
+        Err(Error::ResourceLimit {
+            resource: "decoded allocation bytes",
+            ..
+        })
+    ));
+}
+#[test]
+fn malformed_utf8_and_nul_stay_lossy_and_budgeted_at_public_boundary() {
+    let mut id = vec![0; 64];
+    id[..2].copy_from_slice(&1u16.to_be_bytes());
+    set32(&mut id, 16, 7);
+    let input = aep(vec![list(
+        b"Fold",
+        vec![list(
+            b"Item",
+            vec![chunk(b"idta", &id), chunk(b"Utf8", b"x\xffy\0hidden")],
+        )],
+    )]);
+    assert_eq!(parse(&input).unwrap().project.items[0].name, "x\u{fffd}y");
+    let bad = vec![0xff; 20000];
+    let input = aep(vec![list(
+        b"Fold",
+        vec![list(
+            b"Item",
+            vec![chunk(b"idta", &id), chunk(b"Utf8", &bad)],
+        )],
+    )]);
+    let limits = Limits {
+        max_allocated_bytes: 30000,
+        ..Limits::default()
+    };
+    assert!(matches!(
+        parse_with_limits(&input, &limits),
+        Err(Error::ResourceLimit {
+            resource: "decoded allocation bytes",
+            ..
+        })
+    ));
+}

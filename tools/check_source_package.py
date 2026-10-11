@@ -7,7 +7,7 @@ import tarfile
 ROOT_FILES = {
     "Cargo.toml", "Cargo.toml.orig", "Cargo.lock", ".cargo_vcs_info.json",
     "README.md", "READING-COVERAGE.md", "VALIDATION.md", "PROVENANCE.md",
-    "COMPARISON.md", "LICENSE-MIT", "LICENSE-APACHE",
+    "COMPARISON.md", "CAPABILITIES.md", "CHANGELOG.md", "LICENSE-MIT", "LICENSE-APACHE",
 }
 
 

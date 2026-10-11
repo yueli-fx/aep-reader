@@ -53,9 +53,11 @@ cargo run --manifest-path examples/consumer/Cargo.toml -- project.aep --property
 ## Reading capabilities
 
 An experimental [EffectCraft consumer](examples/effectcraft/README.md) converts
-project structure, transforms, static text and basic shapes/masks into `.ecproj`, with an explicit
-import report. It requires a sibling EffectCraft checkout and has limited mapping
-coverage; parsing success does not imply faithful rendering.
+project structure, transforms, styled text and common text animations, bounded shape
+operators, gradients, masks and camera/light metadata into `.ecproj`, with an explicit
+import report. It requires a sibling EffectCraft checkout. See the
+[capability matrix](CAPABILITIES.md) for implemented subsets, conflicts and remaining
+gaps; parsing or conversion success does not imply faithful rendering.
 
 | Area | Available data |
 |---|---|
@@ -68,7 +70,8 @@ coverage; parsing success does not imply faithful rendering.
 | Gradients and panels | Color/alpha gradient snapshots, validated animation times/interpolation codes and Essential Graphics controller metadata |
 | Render queue and footage | Saved queue/output settings, format options, footage paths, sequence descriptors, solids, placeholders and audio metadata |
 
-See [READING-COVERAGE.md](READING-COVERAGE.md) for API details and the limits of
+See [CAPABILITIES.md](CAPABILITIES.md) for lifecycle states and
+[READING-COVERAGE.md](READING-COVERAGE.md) for API details and the limits of
 each area. Numeric values retain their stored units. Default-value queries
 distinguish file-contained values from tagged reader conventions; they never
 replace saved values. Optional fields and uncertain derived states remain absent
@@ -113,12 +116,17 @@ them as UTF-8 when possible without interpreting XML.
 ## Development
 
 ```sh
+export CARGO_TARGET_DIR="$PWD/.task/local-check-$(date +%s)/target"
 cargo fmt --check
 cargo test --all-features
 cargo clippy --all-targets --all-features -- -D warnings
 cargo check --target wasm32-unknown-unknown --all-features
 python -B tools/check_consumer.py --toolchain stable
 ```
+
+In PowerShell, set `$env:CARGO_TARGET_DIR` to a new directory under `.task`
+instead of using the shell `export` above. Keep generated outputs there and
+remove them after reviewing the results.
 
 [CI](.github/workflows/ci.yml) configures stable checks on Windows, Linux and macOS,
 minimum-Rust checks, Wasm compilation, standalone consumer checks and source-package
